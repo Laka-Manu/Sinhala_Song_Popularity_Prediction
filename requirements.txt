@@ -1,0 +1,9 @@
+streamlit
+pandas<3
+numpy
+librosa
+scikit-learn
+joblib
+plotly
+yt-dlp
+soundfile

@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+temp_audio/
+cookies.txt
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.ogg
