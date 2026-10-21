@@ -98,6 +98,16 @@ def extract_features(path):
 
 
 rows = []
+failed = []
+done = set()
+
+# Resume: keep songs that were already processed in an earlier run
+if os.path.exists(CSV_OUT):
+    old_df = pd.read_csv(CSV_OUT)
+    rows = old_df.to_dict("records")
+    done = set(old_df["Song"].astype(str))
+    print(f"Resuming: {len(done)} songs already done, they will be skipped.\n")
+
 total = len(df)
 
 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -106,10 +116,15 @@ with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         song = row[song_col] if song_col else f"Row {i + 1}"
         views = pd.to_numeric(row[views_col], errors="coerce")
 
+        if str(song) in done:
+            print(f"[{i + 1}/{total}] {song}  (already done, skipped)")
+            continue
+
         print(f"[{i + 1}/{total}] {song}")
 
         if not url.startswith("http") or pd.isna(views):
             print("   ! Skipped (missing link or views)")
+            failed.append({"Song": song, "Link": url, "Reason": "missing link or views"})
             continue
 
         wav_path = None
@@ -117,6 +132,7 @@ with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             wav_path = download_audio(ydl, url)
             if wav_path is None:
                 print("   ! Download failed")
+                failed.append({"Song": song, "Link": url, "Reason": "download failed"})
                 continue
 
             feats = extract_features(wav_path)
@@ -128,19 +144,24 @@ with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
         except Exception as e:
             print(f"   ! Failed: {str(e)[:150]}")
+            failed.append({"Song": song, "Link": url, "Reason": str(e)[:150]})
         finally:
             if wav_path and os.path.exists(wav_path):
                 os.remove(wav_path)
 
         time.sleep(1)
 
-        # Save progress every 10 songs so nothing is lost if it stops
-        if len(rows) % 10 == 0 and rows:
+        # Save progress after every song so nothing is lost if it stops
+        if rows:
             pd.DataFrame(rows).to_csv(CSV_OUT, index=False)
 
 result = pd.DataFrame(rows)
 result.to_csv(CSV_OUT, index=False)
 shutil.rmtree(TEMP_DIR, ignore_errors=True)
+
+if failed:
+    pd.DataFrame(failed).to_csv("failed_songs.csv", index=False)
+    print(f"\n{len(failed)} songs failed. See 'failed_songs.csv' for the reasons.")
 
 print(f"\nDone! {len(result)}/{total} songs processed. Saved to '{CSV_OUT}'.")
 if len(result):
